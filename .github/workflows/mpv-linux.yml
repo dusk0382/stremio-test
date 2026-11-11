@@ -4,6 +4,10 @@ name: libmpv runtime (A4-5300B)
 # ships mpv 0.37 / API 2.2, so playback refuses to initialise with the system
 # library. This builds the pinned mpv commit natively for the A4-5300B ISA
 # (x86-64-v2 + AVX/FMA/F16C/BMI1/LZCNT) and publishes the shared object.
+#
+# Vulkan is ENABLED: the Radeon HD 8570 (Oland) does expose a working RADV
+# device (Vulkan 1.3.318, Mesa 25.2.8), so both libplacebo and mpv are built
+# with the Vulkan backend available.
 on:
   workflow_dispatch:
 
@@ -46,7 +50,7 @@ jobs:
             libpulse-dev libasound2-dev libjack-jackd2-dev \
             libwayland-dev wayland-protocols libxkbcommon-dev \
             libx11-dev libxext-dev libxpresent-dev libxrandr-dev libxss-dev libxv-dev \
-            libvulkan-dev libshaderc-dev libuchardet-dev liblua5.2-dev libmujs-dev
+            libvulkan-dev libshaderc-dev spirv-tools libuchardet-dev liblua5.2-dev libmujs-dev
 
       - name: Verify the assembler supports the workaround
         run: |
@@ -60,14 +64,15 @@ jobs:
           CXXFLAGS: "-O2 ${{ env.BUILD_ARCH }}"
         run: |
           set -euo pipefail
-          git clone --depth 1 -b "$LIBPLACEBO_REF" https://github.com/haasn/libplacebo.git libplacebo
+          # glad/Vulkan-Headers/fast_float are submodules; meson aborts without them.
+          git clone --depth 1 -b "$LIBPLACEBO_REF" --recurse-submodules --shallow-submodules \
+            https://github.com/haasn/libplacebo.git libplacebo
           meson setup libplacebo/build libplacebo \
             --buildtype=release \
             --prefix="$LP_PREFIX" \
             --libdir=lib \
-            -Dvulkan=disabled \
-            -Dglslang=disabled \
-            -Dshaderc=disabled \
+            -Dvulkan=enabled \
+            -Dshaderc=enabled \
             -Ddemos=false -Dtests=false -Dbench=false
           meson compile -C libplacebo/build
           sudo meson install -C libplacebo/build
@@ -110,6 +115,7 @@ jobs:
             --prefix=/usr \
             -Dlibmpv=true \
             -Dorender=enabled \
+            -Dvulkan=enabled \
             -Dcplayer=false \
             -Dtests=false
           meson compile -C build
