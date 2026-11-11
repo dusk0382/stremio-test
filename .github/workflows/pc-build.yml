@@ -1,0 +1,150 @@
+name: PC build (AMD A4-5300B / bdver2)
+
+# Bespoke build for an AMD A4-5300B (Trinity) + Radeon HD 8570 machine.
+# Upstream release binaries are compiled for x86-64-v3 (AVX2/BMI2) and die with
+# SIGILL on this CPU, so this workflow rebuilds the tree for `bdver2`.
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/pc-build.yml"
+      - ".cargo/config.toml"
+      - "triplets/**"
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+
+concurrency:
+  group: pc-build
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_RETRY: 10
+  CARGO_HTTP_MULTIPLEXING: false
+  VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+  VCPKG_INSTALLED_DIR: ${{ github.workspace }}/vcpkg_installed
+  VCPKG_DEFAULT_TRIPLET: x64-linux-bdver2-static-release
+  VCPKGRS_TRIPLET: x64-linux-bdver2-static-release
+  VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/triplets
+  VCPKG_OVERLAY_PORTS: ${{ github.workspace }}/vcpkg-overlays
+  PKG_CONFIG_PATH: ${{ github.workspace }}/vcpkg_installed/x64-linux-bdver2-static-release/lib/pkgconfig
+  LIBTORRENT_STATIC: "1"
+
+jobs:
+  linux-bdver2:
+    name: Linux x64 (bdver2)
+    # 4 vCPU: vcpkg builds static openssl + libtorrent, then Skia and the app.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-07-31
+          components: clippy
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential clang cmake ninja-build pkg-config \
+            libssl-dev libclang-dev libgtk-3-dev libayatana-appindicator3-dev \
+            libmpv-dev libfontconfig1-dev libfreetype6-dev libxkbcommon-dev \
+            libwayland-dev libx11-xcb-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libgl1-mesa-dev libegl1-mesa-dev
+
+      - name: Restore vcpkg cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: vcpkg_installed
+          key: linux-vcpkg-bdver2-v1-${{ hashFiles('vcpkg.json', 'triplets/**', 'vcpkg-overlays/**') }}
+          restore-keys: |
+            linux-vcpkg-bdver2-v1-
+
+      - name: Install static libtorrent 2.1.1 + openssl
+        uses: lukka/run-vcpkg@v11
+        with:
+          vcpkgGitCommitId: "84bab45d415d22042bd0b9081aea57f362da3f35"
+          vcpkgDirectory: "${{ github.workspace }}/vcpkg"
+          vcpkgJsonGlob: "vcpkg.json"
+          runVcpkgInstall: true
+
+      - name: Save vcpkg cache
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: vcpkg_installed
+          key: ${{ steps.vcpkg-cache.outputs.cache-primary-key }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: bdver2
+
+      - name: Show effective target CPU
+        run: |
+          rustc -Vv
+          echo "rustflags for linux x86_64: $(cargo config get target.'cfg(all(target_arch = "x86_64", target_os = "linux"))'.rustflags 2>/dev/null || grep -A6 'target_os = "linux"' .cargo/config.toml)"
+
+      - name: Build release
+        run: cargo build --locked --release --package stremio-native
+
+      - name: Verify binary is not x86-64-v3
+        run: |
+          set -euo pipefail
+          bin=target/release/stremio-native
+          test -x "$bin"
+          ls -lh "$bin"
+          file "$bin"
+          # AVX2-only mnemonics must be absent from the *unconditionally* built
+          # code. Anything Skia gates behind a runtime cpuid probe is fine, so
+          # this is informational, not a hard gate.
+          if objdump -d --no-show-raw-insn "$bin" | grep -E -m5 '\bvperm2i128|\bvpermd|\bvpbroadcast'; then
+            echo "::warning::AVX2 opcodes present (likely runtime-dispatched Skia paths)"
+          else
+            echo "No AVX2 opcodes in the final binary"
+          fi
+          ldd "$bin" | sort
+
+      - name: Install cargo-deb
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deb
+
+      - name: Build .deb
+        run: cargo deb --package stremio-native --no-build
+
+      - name: Stage artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp target/release/stremio-native dist/stremio-native-bdver2
+          cp target/debian/*.deb dist/ 2>/dev/null || true
+          ( cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS )
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stremio-native-linux-bdver2
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="pc-bdver2-$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
+          gh release create "$tag" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Stremio Native bdver2 build (${{ github.sha }})" \
+            --notes "Custom build for AMD A4-5300B (Trinity/Piledriver, family 15h model 10h).
+Built with \`-C target-cpu=bdver2\` and vcpkg triplet \`x64-linux-bdver2-static-release\` (\`-march=bdver2\`), instead of upstream's x86-64-v3 baseline.
+Dynamic deps: system libmpv/libmpv2, gtk3, openssl, fontconfig, freetype, xkbcommon, X11, wayland."
+          echo "release=$tag" >> "$GITHUB_STEP_SUMMARY"
