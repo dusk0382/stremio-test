@@ -436,6 +436,7 @@ export component MainWindow inherits Window {
     in-out property <[StreamLink]> stream-links: [];
     // Same rows as `stream-links`, narrowed by the details stream filter.
     in-out property <[StreamLink]> visible-stream-links: [];
+    in-out property <string> details-stream-query: "";
     in-out property <[string]> detail-stream-providers: ["All"];
     in-out property <int> detail-stream-loading-count: 0;
     in-out property <string> detail-ranking-mode: "Smart";
@@ -2298,6 +2299,7 @@ export component MainWindow inherits Window {
             enrichment-summary: detail-enrichment-summary;
             enrichment-attribution-url: detail-enrichment-attribution-url;
             open-attribution(url) => { root.open-external-url(url); }
+            stream-query <=> root.details-stream-query;
             streams: root.debug-preview-enabled && root.debug-preview-page == 7
                 && (root.debug-preview-state == "movie-no-streams"
                     || root.debug-preview-state == "series-no-streams"

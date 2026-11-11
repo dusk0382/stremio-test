@@ -861,6 +861,13 @@ pub fn start_event_loop(
                                     && *last_id_guard != details_route_id
                                 {
                                     *last_id_guard = details_route_id.clone();
+                                    // A text filter belongs to the title it was
+                                    // typed on; carrying it over would hide the
+                                    // next title's streams.
+                                    if !playback_selections_for_sync.stream_query().is_empty() {
+                                        playback_selections_for_sync.set_stream_query(String::new());
+                                        ui.set_details_stream_query("".into());
+                                    }
                                     if let Ok(mut fingerprint) =
                                         last_stream_fingerprint_clone.lock()
                                     {
