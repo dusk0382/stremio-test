@@ -122,10 +122,17 @@ export component StreamRow inherits Rectangle {
                 overflow: elide;
             }
 
+            // Country flags are regional-indicator pairs. fontconfig resolves
+            // them with FreeSans, which draws the two letters ("GB") instead of
+            // the flag ligature, so this line asks for the colour emoji font
+            // first; the words ("Multi Subs", ...) fall back to the normal one.
             if (root.languages != "") : Text {
+                height: 1.3 * root.unit;
                 text: root.languages;
                 color: Theme.text-secondary;
+                font-family: "Noto Color Emoji";
                 font-size: 0.82 * root.unit;
+                vertical-alignment: center;
                 overflow: elide;
             }
         }
