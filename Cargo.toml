@@ -68,7 +68,7 @@ rodio = { version = "0.22.2", default-features = false, features = ["playback", 
 mlua = { version = "0.12.0", features = ["lua54", "vendored", "serialize"] }
 minidump-writer = "0.13.0"
 minidumper = "0.11.0"
-turso = { version = "0.7.2", default-features = false }
+turso = { version = "0.8.3", default-features = false }
 
 [patch.crates-io]
 # PATCH (stremio-test): rustix 0.37.28 (pulled in via async-io 1.13 -> zbus 3)
