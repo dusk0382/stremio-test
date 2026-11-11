@@ -20,6 +20,10 @@ env:
   # x86-64 but can emit 32-byte aligned spills for AVX; the workaround rewrites
   # them to unaligned moves (this is the crash upstream's audit script guards).
   BUILD_ARCH: "-march=x86-64-v2 -mavx -mfma -mf16c -mbmi -mlzcnt"
+  # Ubuntu 24.04 ships libplacebo 6.338, but mpv 0.41 requires >= 7.360.1, so we
+  # build that one library ourselves into a prefix the mpv build can see.
+  LP_PREFIX: /usr/local
+  LIBPLACEBO_REF: v7.360.1
 
 jobs:
   linux:
@@ -50,6 +54,26 @@ jobs:
           as --help 2>&1 | grep -q 'muse-unaligned-vector-move'
           as --version | head -1
 
+      - name: Build libplacebo (mpv 0.41 needs >= 7.360.1)
+        env:
+          CFLAGS: "-O2 ${{ env.BUILD_ARCH }}"
+          CXXFLAGS: "-O2 ${{ env.BUILD_ARCH }}"
+        run: |
+          set -euo pipefail
+          git clone --depth 1 -b "$LIBPLACEBO_REF" https://github.com/haasn/libplacebo.git libplacebo
+          meson setup libplacebo/build libplacebo \
+            --buildtype=release \
+            --prefix="$LP_PREFIX" \
+            --libdir=lib \
+            -Dvulkan=disabled \
+            -Dglslang=disabled \
+            -Dshaderc=disabled \
+            -Ddemos=false -Dtests=false -Dbench=false
+          meson compile -C libplacebo/build
+          sudo meson install -C libplacebo/build
+          sudo ldconfig
+          PKG_CONFIG_PATH="$LP_PREFIX/lib/pkgconfig" pkg-config --modversion libplacebo
+
       - name: Check out mpv
         run: |
           set -euo pipefail
@@ -77,6 +101,8 @@ jobs:
         env:
           CFLAGS: "-O2 ${{ env.BUILD_ARCH }} -Wa,-muse-unaligned-vector-move"
           CXXFLAGS: "-O2 ${{ env.BUILD_ARCH }} -Wa,-muse-unaligned-vector-move"
+          PKG_CONFIG_PATH: "/usr/local/lib/pkgconfig"
+          LD_LIBRARY_PATH: "/usr/local/lib"
         run: |
           set -euo pipefail
           meson setup build \
@@ -98,6 +124,7 @@ jobs:
           stage=libmpv-linux-x86_64
           mkdir -p "$stage/lib" "$stage/include/mpv"
           cp -a mpv/build/libmpv.so* "$stage/lib/"
+          cp -a /usr/local/lib/libplacebo*.so* "$stage/lib/"
           cp mpv/include/mpv/*.h "$stage/include/mpv/"
           cp mpv/LICENSE.GPL mpv/LICENSE.LGPL "$stage/"
           printf 'mpv %s\narch=%s\nbuilt with -Wa,-muse-unaligned-vector-move + omniphony patch (-Dorender=enabled)\n' \
@@ -120,7 +147,7 @@ jobs:
           {
             echo 'libmpv built for an AMD A4-5300B (x86-64-v2 + AVX/FMA/F16C/BMI1/LZCNT).'
             echo
-            echo 'Unpack and point `LD_LIBRARY_PATH` at `libmpv-linux-x86_64/lib`.'
+            echo 'Unpack and point `LD_LIBRARY_PATH` at `libmpv-linux-x86_64/lib` (libmpv + the libplacebo it was built against).'
             echo 'Source: mpv `'"$MPV_REVISION"'` with the repository omniphony patch.'
           } > notes.md
           gh release create "$tag" libmpv-linux-x86_64-*.tar.zst \
