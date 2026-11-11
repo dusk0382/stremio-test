@@ -50,7 +50,10 @@ fn stream_matches_query(link: &StreamLink, terms: &[String]) -> bool {
     if terms.is_empty() {
         return true;
     }
-    let haystack = normalize_for_match(&format!("{} {}", link.name, link.description));
+    let haystack = normalize_for_match(&format!(
+        "{} {} {} {} {}",
+        link.name, link.title, link.meta, link.languages, link.description
+    ));
     terms.iter().all(|term| haystack.contains(term))
 }
 
@@ -82,6 +85,9 @@ pub(crate) fn project_stream_selection_views(
             StreamLink {
                 id: link.id.into(),
                 name: link.name.into(),
+                title: link.title.into(),
+                meta: link.meta.into(),
+                languages: link.languages.into(),
                 description: link.description.into(),
                 provider: link.provider.into(),
                 thumbnail: link

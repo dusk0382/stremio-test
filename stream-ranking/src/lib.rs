@@ -506,12 +506,67 @@ pub fn format_size(bytes: u64) -> String {
     }
 }
 
-pub fn format_stream_description(
+/// The addon description split into the three things the UI shows on
+/// separate lines: the release name, the `seeders / size / tracker` line and
+/// the subtitle/dub languages line.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct StreamDescriptionParts {
+    pub title: String,
+    pub meta: String,
+    pub languages: String,
+}
+
+/// True for the line addons use to list subtitles/dubs (flags, "Multi Subs",
+/// "Dublado", ...). Release-name lines are excluded so a second file name is
+/// not mistaken for a language list.
+fn is_language_line(line: &str) -> bool {
+    if line
+        .chars()
+        .any(|character| ('\u{1f1e6}'..='\u{1f1ff}').contains(&character))
+    {
+        return true;
+    }
+    let lower = line.to_lowercase();
+    const HINTS: [&str; 12] = [
+        "sub",
+        "dub",
+        "audio",
+        "lang",
+        "latino",
+        "castellano",
+        "espa\u{00f1}ol",
+        "espanol",
+        "legendado",
+        "dublado",
+        "vostfr",
+        "vose",
+    ];
+    HINTS.iter().any(|hint| lower.contains(hint))
+}
+
+fn is_meta_line(line: &str) -> bool {
+    line.contains('\u{1f464}')
+        || line.contains('\u{1f4be}')
+        || line.contains('\u{2699}')
+        || line.contains('\u{2261}')
+        || line.contains('\u{1f5d3}')
+        || line.contains('\u{1f4fa}')
+        || line.contains('\u{26a1}')
+        || line.to_ascii_uppercase().contains("SEEDERS")
+        || line.to_ascii_uppercase().contains("SEEDS")
+}
+
+/// Splits an addon description into title, stats and language lines.
+///
+/// Torrent-style addons send one line per concern; the previous version of this
+/// helper threw away every line that was not a stats line, which silently
+/// dropped the subtitle/dub language line (the one with the flag emojis).
+pub fn stream_description_parts(
     name: &str,
     description: &str,
     size_bytes: Option<u64>,
     seeders: Option<u32>,
-) -> String {
+) -> StreamDescriptionParts {
     let seeders = seeders
         .or_else(|| parse_seeders_from_text(description))
         .or_else(|| parse_seeders_from_text(name));
@@ -528,53 +583,47 @@ pub fn format_stream_description(
     if raw_lines.is_empty() {
         let mut stats = Vec::new();
         if let Some(s) = seeders {
-            stats.push(format!("👤 {s}"));
+            stats.push(format!("\u{1f464} {s}"));
         }
         if let Some(sz) = size_bytes {
-            stats.push(format!("💾 {}", format_size(sz)));
+            stats.push(format!("\u{1f4be} {}", format_size(sz)));
         }
-        return stats.join(" ");
+        return StreamDescriptionParts {
+            title: String::new(),
+            meta: stats.join(" "),
+            languages: String::new(),
+        };
     }
 
-    let mut title_lines = Vec::new();
-    let mut meta_lines = Vec::new();
+    let title = raw_lines[0].to_string();
+    let mut meta_line = raw_lines
+        .iter()
+        .skip(1)
+        .filter(|line| is_meta_line(line))
+        .map(|line| (*line).to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
+    // Language/dub hints live on their own line, after the stats line.
+    let languages = raw_lines
+        .iter()
+        .skip(1)
+        .filter(|line| !is_meta_line(line) && is_language_line(line))
+        .map(|line| (*line).to_string())
+        .collect::<Vec<_>>()
+        .join(" \u{00b7} ");
 
-    for line in &raw_lines {
-        let is_meta = line.contains('👤')
-            || line.contains('💾')
-            || line.contains('⚙')
-            || line.contains('≡')
-            || line.contains('🗓')
-            || line.contains('📺')
-            || line.contains('⚡')
-            || line.to_ascii_uppercase().contains("SEEDERS")
-            || line.to_ascii_uppercase().contains("SEEDS");
-        if is_meta {
-            meta_lines.push((*line).to_string());
-        } else {
-            title_lines.push((*line).to_string());
-        }
-    }
-
-    let title = if title_lines.is_empty() {
-        raw_lines[0].to_string()
-    } else {
-        title_lines[0].clone()
-    };
-
-    let mut meta_line = meta_lines.join(" ");
     let meta_upper = meta_line.to_ascii_uppercase();
     if let Some(s) = seeders
-        && !meta_line.contains('👤')
+        && !meta_line.contains('\u{1f464}')
         && !meta_upper.contains("SEED")
     {
         if !meta_line.is_empty() {
             meta_line.push(' ');
         }
-        meta_line.push_str(&format!("👤 {s}"));
+        meta_line.push_str(&format!("\u{1f464} {s}"));
     }
     if let Some(sz) = size_bytes
-        && !meta_line.contains('💾')
+        && !meta_line.contains('\u{1f4be}')
         && !meta_upper.contains("GB")
         && !meta_upper.contains("MB")
         && !meta_upper.contains("GIB")
@@ -583,14 +632,31 @@ pub fn format_stream_description(
         if !meta_line.is_empty() {
             meta_line.push(' ');
         }
-        meta_line.push_str(&format!("💾 {}", format_size(sz)));
+        meta_line.push_str(&format!("\u{1f4be} {}", format_size(sz)));
     }
 
-    if meta_line.is_empty() {
-        title
-    } else {
-        format!("{title}\n{meta_line}")
+    StreamDescriptionParts {
+        title,
+        meta: meta_line,
+        languages,
     }
+}
+
+/// Single-string form of [`stream_description_parts`], used where one label is
+/// all the space there is (player stream menu, accessibility text). Kept to two
+/// lines because those labels are single-row and height-limited.
+pub fn format_stream_description(
+    name: &str,
+    description: &str,
+    size_bytes: Option<u64>,
+    seeders: Option<u32>,
+) -> String {
+    let parts = stream_description_parts(name, description, size_bytes, seeders);
+    [parts.title, parts.meta]
+        .into_iter()
+        .filter(|line| !line.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 #[cfg(test)]

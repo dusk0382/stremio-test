@@ -14,6 +14,11 @@ import { SharePrompt } from "../components/share_prompt.slint";
 export struct StreamLink {
     id: string,
     name: string,
+    // Release name, stats line (seeders/size/tracker) and language line, kept
+    // apart so each can be rendered on its own line.
+    title: string,
+    meta: string,
+    languages: string,
     description: string,
     provider: string,
     thumbnail-url: string,
@@ -643,6 +648,9 @@ export component DetailsPage inherits Rectangle {
                         height: 5.6 * root.unit;
                         unit: root.unit;
                         name: stream.name;
+                        title: stream.title;
+                        meta: stream.meta;
+                        languages: stream.languages;
                         description: stream.description;
                         score-label: root.ranking-mode == "Original" ? "" : (stream.score >= 0 ? "+" + stream.score : "" + stream.score);
                         score-details: stream.score-summary;

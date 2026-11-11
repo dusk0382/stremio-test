@@ -43,6 +43,11 @@ const TRAILER_PREVIEW_GENRE_LIMIT: usize = 3;
 pub struct StreamSelectionView {
     pub id: String,
     pub name: String,
+    /// Release name, stats line and language line, kept apart so the stream row
+    /// can render each on its own line instead of one wrapped paragraph.
+    pub title: String,
+    pub meta: String,
+    pub languages: String,
     pub description: String,
     pub provider: String,
     pub thumbnail: Option<String>,
@@ -206,6 +211,12 @@ impl PlaybackSelections {
                     .video_size
                     .or_else(|| stream_ranking::parse_size_bytes_from_text(&description))
                     .or_else(|| stream_ranking::parse_size_bytes_from_text(&name));
+                let description_parts = stream_ranking::stream_description_parts(
+                    &name,
+                    &description,
+                    size_bytes,
+                    seeders,
+                );
                 let formatted_description = stream_ranking::format_stream_description(
                     &name,
                     &description,
@@ -227,6 +238,13 @@ impl PlaybackSelections {
                 views.push(StreamSelectionView {
                     id: id.clone(),
                     name: name.clone(),
+                    title: if description_parts.title.is_empty() {
+                        name.clone()
+                    } else {
+                        description_parts.title.clone()
+                    },
+                    meta: description_parts.meta.clone(),
+                    languages: description_parts.languages.clone(),
                     description: formatted_description.clone(),
                     thumbnail: stream.thumbnail.clone(),
                     progress: stream

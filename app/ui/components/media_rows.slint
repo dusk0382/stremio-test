@@ -6,6 +6,11 @@ import { SkeletonBlock } from "feedback.slint";
 export component StreamRow inherits Rectangle {
     in property <length> unit: 16px;
     in property <string> name;
+    // Three existing description lines, rendered separately: the release name,
+    // the seeders/size/tracker line and the subtitle/dub language line.
+    in property <string> title;
+    in property <string> meta;
+    in property <string> languages;
     in property <string> description;
     in property <string> score-label: "";
     in property <string> score-details: "";
@@ -96,14 +101,31 @@ export component StreamRow inherits Rectangle {
         VerticalLayout {
             horizontal-stretch: 1;
             alignment: center;
-            spacing: 0.2 * root.unit;
+            spacing: 0.15 * root.unit;
 
+            // The release name gets two lines at most (fixed height + elide),
+            // so the stats and language lines below always stay visible.
             Text {
-                text: root.description;
+                height: 2.3 * root.unit;
+                text: root.title == "" ? root.description : root.title;
                 color: Theme.text-primary;
                 opacity: 0.88;
                 font-size: 0.95 * root.unit;
                 wrap: word-wrap;
+                overflow: elide;
+            }
+
+            if (root.meta != "") : Text {
+                text: root.meta;
+                color: Theme.text-secondary;
+                font-size: 0.82 * root.unit;
+                overflow: elide;
+            }
+
+            if (root.languages != "") : Text {
+                text: root.languages;
+                color: Theme.text-secondary;
+                font-size: 0.82 * root.unit;
                 overflow: elide;
             }
         }
