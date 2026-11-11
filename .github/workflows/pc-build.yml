@@ -141,10 +141,15 @@ jobs:
         run: |
           set -euo pipefail
           tag="pc-bdver2-$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
+          {
+            echo 'Custom build for an AMD A4-5300B (Trinity / Piledriver, family 15h model 10h).'
+            echo
+            echo 'Compiled with `-C target-cpu=bdver2` and vcpkg triplet `x64-linux-bdver2-static-release` (`-march=bdver2`) instead of upstream'\''s x86-64-v3 (AVX2/BMI2) baseline, which raises SIGILL on this CPU.'
+            echo
+            echo 'Dynamic deps: system libmpv2, gtk3, openssl, fontconfig, freetype, xkbcommon, X11, wayland.'
+          } > notes.md
           gh release create "$tag" dist/* \
             --repo "$GITHUB_REPOSITORY" \
             --title "Stremio Native bdver2 build (${{ github.sha }})" \
-            --notes "Custom build for AMD A4-5300B (Trinity/Piledriver, family 15h model 10h).
-Built with \`-C target-cpu=bdver2\` and vcpkg triplet \`x64-linux-bdver2-static-release\` (\`-march=bdver2\`), instead of upstream's x86-64-v3 baseline.
-Dynamic deps: system libmpv/libmpv2, gtk3, openssl, fontconfig, freetype, xkbcommon, X11, wayland."
+            --notes-file notes.md
           echo "release=$tag" >> "$GITHUB_STEP_SUMMARY"
