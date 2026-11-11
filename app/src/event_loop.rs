@@ -34,11 +34,47 @@ fn update_vec_model<T: Clone + 'static>(
     Ok(())
 }
 
+/// Lowercases and drops separators so "h264" matches "H.264", "web dl"
+/// matches "WEB-DL" and pasted release names still match. Letters, digits and
+/// symbols above U+2190 (emoji language flags) are kept.
+fn normalize_for_match(text: &str) -> String {
+    text.chars()
+        .flat_map(char::to_lowercase)
+        .filter(|character| character.is_alphanumeric() || (*character as u32) >= 0x2190)
+        .collect()
+}
+
+/// Case-insensitive, whitespace-separated AND match over the text the row
+/// actually shows (addon name + full description).
+fn stream_matches_query(link: &StreamLink, terms: &[String]) -> bool {
+    if terms.is_empty() {
+        return true;
+    }
+    let haystack = normalize_for_match(&format!("{} {}", link.name, link.description));
+    terms.iter().all(|term| haystack.contains(term))
+}
+
 pub(crate) fn project_stream_selection_views(
     ui: &MainWindow,
     ui_weak: &slint::Weak<MainWindow>,
     stream_selection_views: Vec<crate::playback::StreamSelectionView>,
+    stream_query: &str,
 ) {
+    // Provider chips must list every provider the addons returned, not only the
+    // ones left after the text filter.
+    let mut providers = vec![slint::SharedString::from("All")];
+    for stream in &stream_selection_views {
+        let provider = slint::SharedString::from(stream.provider.as_str());
+        if !providers.iter().any(|known| known == &provider) {
+            providers.push(provider);
+        }
+    }
+    let terms = stream_query
+        .split_whitespace()
+        .map(normalize_for_match)
+        .filter(|term| !term.is_empty())
+        .collect::<Vec<_>>();
+
     let stream_links: Vec<StreamLink> = stream_selection_views
         .into_iter()
         .map(|link| {
@@ -68,18 +104,20 @@ pub(crate) fn project_stream_selection_views(
             }
         })
         .collect();
-    let mut providers = vec![slint::SharedString::from("All")];
-    for stream in &stream_links {
-        if !providers
-            .iter()
-            .any(|provider| provider == &stream.provider)
-        {
-            providers.push(stream.provider.clone());
-        }
-    }
+    // The details list honours the text filter; the player's "switch stream"
+    // menu always gets the complete list.
+    let visible_links: Vec<StreamLink> = stream_links
+        .iter()
+        .filter(|link| stream_matches_query(link, &terms))
+        .cloned()
+        .collect();
     let current_streams = ui.get_stream_links();
     if let Err(stream_links) = update_vec_model(&current_streams, stream_links) {
         ui.set_stream_links(slint::ModelRc::new(slint::VecModel::from(stream_links)));
+    }
+    let current_visible = ui.get_visible_stream_links();
+    if let Err(visible_links) = update_vec_model(&current_visible, visible_links) {
+        ui.set_visible_stream_links(slint::ModelRc::new(slint::VecModel::from(visible_links)));
     }
     let current_providers = ui.get_detail_stream_providers();
     if let Err(providers) = update_vec_model(&current_providers, providers) {
@@ -145,9 +183,10 @@ fn schedule_debrid_annotations(
             let model = runtime.model().expect("model read failed");
             playback_selections.rebuild(&model.meta_details, &model.ctx.profile.addons)
         };
+        let query = playback_selections.stream_query();
         let _ = slint::invoke_from_event_loop(move || {
             if let Some(ui) = ui_weak.upgrade() {
-                project_stream_selection_views(&ui, &ui_weak, views);
+                project_stream_selection_views(&ui, &ui_weak, views, &query);
             }
         });
     });
@@ -841,6 +880,7 @@ pub fn start_event_loop(
                                         &ui,
                                         &ui_weak_for_sync,
                                         stream_selection_views,
+                                        &playback_selections_for_sync.stream_query(),
                                     );
                                     schedule_debrid_annotations(
                                         runtime_for_sync.clone(),

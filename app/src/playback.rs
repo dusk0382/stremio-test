@@ -69,6 +69,10 @@ pub struct PlaybackSelections {
     trailer_id: RwLock<Option<String>>,
     ranking_mode: AtomicU8,
     show_filtered: AtomicBool,
+    /// Free-text filter typed in the details stream list. Kept here so any
+    /// re-projection of the stream views (rating change, debrid annotations,
+    /// model updates) keeps the same rows hidden.
+    stream_query: RwLock<String>,
     source_generation: AtomicU64,
     source_key: RwLock<String>,
     debrid_availability: RwLock<HashMap<String, stream_ranking::DebridAvailability>>,
@@ -338,6 +342,20 @@ impl PlaybackSelections {
 
     pub fn set_show_filtered(&self, show: bool) {
         self.show_filtered.store(show, Ordering::Release);
+    }
+
+    pub fn set_stream_query(&self, query: String) {
+        *self
+            .stream_query
+            .write()
+            .unwrap_or_else(|poisoned| poisoned.into_inner()) = query;
+    }
+
+    pub fn stream_query(&self) -> String {
+        match self.stream_query.read() {
+            Ok(query) => query.clone(),
+            Err(poisoned) => poisoned.into_inner().clone(),
+        }
     }
 
     pub fn debrid_candidates(&self) -> (u64, Vec<(String, String)>) {

@@ -108,6 +108,11 @@ export component DetailsPage inherits Rectangle {
     callback share-social(string, string);
     callback ranking-mode-changed(string);
     callback show-filtered-changed(bool);
+    callback stream-query-changed(string);
+    // Client-side text filter over the stream rows. Addons ship long release
+    // names, so matching on the raw text ("h264", "multi", "1080p") is the
+    // quickest way to narrow the list without touching addon data.
+    in-out property <string> stream-query: "";
     in property <string> share-url: "";
     in-out property <bool> share-modal-open: false;
     private property <bool> stream-context-open: false;
@@ -338,6 +343,21 @@ export component DetailsPage inherits Rectangle {
                 }
             }
 
+            if ((!root.is-series || root.in-stream-view)
+                    && (root.streams.length > 0 || root.stream-query != "")) : HorizontalLayout {
+                height: 3 * root.unit;
+                padding-left: 0.5 * root.unit;
+                padding-right: 0.5 * root.unit;
+
+                SearchBar {
+                    horizontal-stretch: 1;
+                    unit: root.unit;
+                    text <=> root.stream-query;
+                    title: @tr("FILTER_STREAMS" => "Filter streams: h264, 1080p, multi, latino...");
+                    edited => { root.stream-query-changed(root.stream-query); }
+                }
+            }
+
             if ((!root.is-series || root.in-stream-view) && root.streams.length > 0) : Rectangle {
                 height: 2.25 * root.unit;
                 background: transparent;
@@ -512,7 +532,36 @@ export component DetailsPage inherits Rectangle {
                 }
             }
 
-            if ((!root.is-series || root.in-stream-view) && root.streams.length == 0) : VerticalLayout {
+            if ((!root.is-series || root.in-stream-view) && root.streams.length == 0
+                    && root.stream-query != "") : VerticalLayout {
+                vertical-stretch: 1;
+                padding-top: root.unit;
+                padding-bottom: root.unit;
+                spacing: 1.25 * root.unit;
+                alignment: center;
+
+                EmptyState {
+                    height: 10 * root.unit;
+                    unit: root.unit;
+                    icon-source: @image-url("../assets/images/icons/search.svg");
+                    title: @tr("NO_MATCHING_STREAM" => "No streams match that filter");
+                    message: root.stream-query;
+                }
+
+                PillButton {
+                    width: 12 * root.unit;
+                    unit: root.unit;
+                    label: @tr("CLEAR_FILTER" => "Clear filter");
+                    outlined: true;
+                    clicked => {
+                        root.stream-query = "";
+                        root.stream-query-changed("");
+                    }
+                }
+            }
+
+            if ((!root.is-series || root.in-stream-view) && root.streams.length == 0
+                    && root.stream-query == "") : VerticalLayout {
                 vertical-stretch: 1;
                 padding-top: root.unit;
                 padding-bottom: root.unit;

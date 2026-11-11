@@ -76,6 +76,18 @@ pub fn setup_ui_callbacks(
         }
     });
 
+    // Free-text filter for the stream list. Addon rows are long release names,
+    // so matching the visible text is faster than reading every row.
+    ui.on_details_stream_query_changed({
+        let runtime = runtime.clone();
+        let playback_selections = playback_selections.clone();
+        let ui_weak = ui_weak.clone();
+        move |query| {
+            playback_selections.set_stream_query(query.to_string());
+            project_current_streams(&runtime, &playback_selections, &ui_weak);
+        }
+    });
+
     // Play stream action
     ui.on_play_stream({
         let ui_weak = ui_weak.clone();
@@ -444,8 +456,9 @@ fn project_current_streams(
         let model = runtime.model().expect("model read failed");
         playback_selections.rebuild(&model.meta_details, &model.ctx.profile.addons)
     };
+    let query = playback_selections.stream_query();
     if let Some(ui) = ui_weak.upgrade() {
-        crate::event_loop::project_stream_selection_views(&ui, ui_weak, views);
+        crate::event_loop::project_stream_selection_views(&ui, ui_weak, views, &query);
     }
 }
 

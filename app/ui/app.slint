@@ -434,6 +434,8 @@ export component MainWindow inherits Window {
     in-out property <bool> addon-details-configurable: false;
     in-out property <bool> addon-details-configuration-required: false;
     in-out property <[StreamLink]> stream-links: [];
+    // Same rows as `stream-links`, narrowed by the details stream filter.
+    in-out property <[StreamLink]> visible-stream-links: [];
     in-out property <[string]> detail-stream-providers: ["All"];
     in-out property <int> detail-stream-loading-count: 0;
     in-out property <string> detail-ranking-mode: "Smart";
@@ -627,6 +629,7 @@ export component MainWindow inherits Window {
     callback details-share-social(string, string);
     callback details-ranking-mode-changed(string);
     callback details-show-filtered-changed(bool);
+    callback details-stream-query-changed(string);
 
     // Player Page parameters
     in property <bool> show-player: false;
@@ -2299,7 +2302,7 @@ export component MainWindow inherits Window {
                 && (root.debug-preview-state == "movie-no-streams"
                     || root.debug-preview-state == "series-no-streams"
                     || root.debug-preview-state == "details-loading")
-                ? [] : stream-links;
+                ? [] : visible-stream-links;
             stream-providers: detail-stream-providers;
             ranking-mode <=> root.detail-ranking-mode;
             show-filtered <=> root.detail-show-filtered;
@@ -2384,6 +2387,7 @@ export component MainWindow inherits Window {
             share-social(platform, url) => { details-share-social(platform, url); }
             ranking-mode-changed(mode) => { details-ranking-mode-changed(mode); }
             show-filtered-changed(show) => { details-show-filtered-changed(show); }
+            stream-query-changed(query) => { details-stream-query-changed(query); }
             play-stream(selection-id) => { play-stream(selection-id); }
             toggle-fullscreen => { root.player-toggle-fullscreen(); }
             close => {
