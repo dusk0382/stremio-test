@@ -67,7 +67,10 @@ jobs:
       - name: Check client API version
         run: |
           set -euo pipefail
-          grep -E "define MPV_CLIENT_API_MAJOR|define MPV_CLIENT_API_MINOR" mpv/include/mpv/client.h
+          version=$(grep -m1 'define MPV_CLIENT_API_VERSION' mpv/include/mpv/client.h)
+          echo "$version"
+          # Must be MPV_MAKE_VERSION(2, 5): playback-mpv rejects older runtimes.
+          grep -q 'MPV_MAKE_VERSION(2, 5)' <<<"$version"
 
       - name: Build libmpv
         working-directory: mpv
