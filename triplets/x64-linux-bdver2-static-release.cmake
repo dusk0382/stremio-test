@@ -3,8 +3,9 @@ set(VCPKG_CMAKE_SYSTEM_NAME Linux)
 set(VCPKG_CRT_LINKAGE dynamic)
 set(VCPKG_LIBRARY_LINKAGE static)
 set(VCPKG_BUILD_TYPE release)
-# bdver2 = AMD Piledriver (A4-5300B). The upstream triplet uses -march=x86-64-v3
-# (AVX2/BMI2), which is illegal on this CPU; the static openssl/libtorrent built
-# with it would crash the whole process the first time those paths ran.
-set(VCPKG_C_FLAGS_RELEASE "-march=bdver2")
-set(VCPKG_CXX_FLAGS_RELEASE "-march=bdver2")
+# Target CPU: AMD A4-5300B (Trinity). Not -march=bdver2, because that emits
+# XOP/FMA4/TBM which modern AMD/Intel hosts lack (the build machine would then
+# crash on anything it executes), and not upstream's x86-64-v3 because AVX2/BMI2
+# is illegal on this CPU. x86-64-v2 + AVX/FMA/F16C/BMI1/LZCNT runs on both.
+set(VCPKG_C_FLAGS_RELEASE "-march=x86-64-v2 -mavx -mfma -mf16c -mbmi -mlzcnt")
+set(VCPKG_CXX_FLAGS_RELEASE "-march=x86-64-v2 -mavx -mfma -mf16c -mbmi -mlzcnt")

@@ -72,10 +72,20 @@ rustflags = [
 [target.'cfg(all(target_arch = "x86_64", target_os = "linux"))']
 # CUSTOM BUILD for an AMD A4-5300B (Trinity / Piledriver APU, family 15h
 # model 10h). Upstream targets x86-64-v3 (AVX2/BMI2), which faults with SIGILL
-# on this CPU. `bdver2` is LLVM's name for Piledriver: it enables exactly the
-# ISA this chip has (AVX, FMA, FMA4, XOP, TBM, BMI1, F16C) and nothing more.
-# Verified locally: a bdver2 binary runs, an x86-64-v3 one dies with SIGILL.
-rustflags = ["-C", "target-cpu=bdver2"]
+# on this CPU (verified locally).
+#
+# Why not `target-cpu=bdver2`: LLVM's bdver2 also enables XOP/FMA4/TBM, which
+# AMD dropped in Zen. Build scripts are compiled for the *host*, and a GitHub
+# runner is Zen, so a bdver2 build dies with SIGILL while compiling. Instead use
+# the x86-64-v2 baseline (SSE4.2/POPCNT, the A4-5300B has it) plus only the
+# extensions that both Piledriver and Zen implement: AVX, FMA3, F16C, BMI1,
+# LZCNT.
+rustflags = [
+    "-C",
+    "target-cpu=x86-64-v2",
+    "-C",
+    "target-feature=+avx,+fma,+f16c,+bmi1,+lzcnt",
+]
 
 # Keep debug builds responsive without optimizing the entire dependency graph.
 # These crates own the application's image decode, hashing/compression, and

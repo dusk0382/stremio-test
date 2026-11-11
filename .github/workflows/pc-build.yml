@@ -1,4 +1,4 @@
-name: PC build (AMD A4-5300B / bdver2)
+name: PC build (AMD A4-5300B / x86-64-v2+avx)
 
 # Bespoke build for an AMD A4-5300B (Trinity) + Radeon HD 8570 machine.
 # Upstream release binaries are compiled for x86-64-v3 (AVX2/BMI2) and die with
@@ -36,7 +36,7 @@ env:
 
 jobs:
   linux-bdver2:
-    name: Linux x64 (bdver2)
+    name: Linux x64 (A4-5300B)
     # 4 vCPU: vcpkg builds static openssl + libtorrent, then Skia and the app.
     runs-on: ubuntu-24.04
     timeout-minutes: 330
@@ -144,7 +144,7 @@ jobs:
           {
             echo 'Custom build for an AMD A4-5300B (Trinity / Piledriver, family 15h model 10h).'
             echo
-            echo 'Compiled with `-C target-cpu=bdver2` and vcpkg triplet `x64-linux-bdver2-static-release` (`-march=bdver2`) instead of upstream'\''s x86-64-v3 (AVX2/BMI2) baseline, which raises SIGILL on this CPU.'
+            echo 'Compiled for `x86-64-v2` plus the AVX/FMA3/F16C/BMI1/LZCNT extensions that this APU has, instead of upstream'\''s x86-64-v3 (AVX2/BMI2) baseline, which raises SIGILL here. bdver2 was not used because it also emits XOP/FMA4/TBM, which modern build hosts no longer implement.'
             echo
             echo 'Dynamic deps: system libmpv2, gtk3, openssl, fontconfig, freetype, xkbcommon, X11, wayland.'
           } > notes.md
