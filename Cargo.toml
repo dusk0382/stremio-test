@@ -10,7 +10,7 @@ members = [
     "server-connector",
     "stream-ranking",
 ]
-exclude = ["vendor/i-slint-renderer-skia", "vendor/i-slint-core"]
+exclude = ["vendor/i-slint-renderer-skia", "vendor/i-slint-core", "vendor/rustix"]
 
 [workspace.package]
 authors = ["perpetus <perpetus.github@gmail.com>"]
@@ -71,6 +71,10 @@ minidumper = "0.11.0"
 turso = { version = "0.7.2", default-features = false }
 
 [patch.crates-io]
+# PATCH (stremio-test): rustix 0.37.28 (pulled in via async-io 1.13 -> zbus 3)
+# fails to compile on nightly-2026-07-31; see vendor/rustix/build.rs. The vendored
+# copy is byte-identical apart from that one build.rs line.
+rustix = { path = "vendor/rustix" }
 # Slint 1.17 asks glutin for OpenGL without a version, which glutin maps to
 # exactly 3.3. Keep Slint's public unversioned policy while negotiating the
 # newest desktop context that each driver actually supports.

@@ -93,7 +93,8 @@ jobs:
           echo "rustflags for linux x86_64: $(cargo config get target.'cfg(all(target_arch = "x86_64", target_os = "linux"))'.rustflags 2>/dev/null || grep -A6 'target_os = "linux"' .cargo/config.toml)"
 
       - name: Build release
-        run: cargo build --locked --release --package stremio-native
+        # No --locked: the vendored rustix patch rewrites the rustix entry.
+        run: cargo build --release --package stremio-native
 
       - name: Verify binary is not x86-64-v3
         run: |
