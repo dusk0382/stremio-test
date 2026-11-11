@@ -1,0 +1,126 @@
+name: libmpv runtime (A4-5300B)
+
+# The app links libmpv and requires client API 2.5 (mpv >= 0.40). Ubuntu 24.04
+# ships mpv 0.37 / API 2.2, so playback refuses to initialise with the system
+# library. This builds the pinned mpv commit natively for the A4-5300B ISA
+# (x86-64-v2 + AVX/FMA/F16C/BMI1/LZCNT) and publishes the shared object.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mpv-linux
+  cancel-in-progress: false
+
+env:
+  MPV_REVISION: 304426c390901436fb1d4a63efbd582ae80c88f4
+  # -Wa,-muse-unaligned-vector-move: GCC assumes only 16-byte stack alignment on
+  # x86-64 but can emit 32-byte aligned spills for AVX; the workaround rewrites
+  # them to unaligned moves (this is the crash upstream's audit script guards).
+  BUILD_ARCH: "-march=x86-64-v2 -mavx -mfma -mf16c -mbmi -mlzcnt"
+
+jobs:
+  linux:
+    name: Linux x86_64 libmpv
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential meson ninja-build pkg-config python3-pip git ca-certificates \
+            libavcodec-dev libavdevice-dev libavfilter-dev libavformat-dev libavutil-dev \
+            libswresample-dev libswscale-dev \
+            libass-dev libplacebo-dev libzimg-dev libarchive-dev libbluray-dev \
+            libdrm-dev libegl1-mesa-dev libgl1-mesa-dev libgbm-dev \
+            libpulse-dev libasound2-dev libjack-jackd2-dev \
+            libwayland-dev wayland-protocols libxkbcommon-dev \
+            libx11-dev libxext-dev libxpresent-dev libxrandr-dev libxss-dev libxv-dev \
+            libvulkan-dev libshaderc-dev libuchardet-dev liblua5.2-dev libmujs-dev
+
+      - name: Verify the assembler supports the workaround
+        run: |
+          set -euo pipefail
+          as --help 2>&1 | grep -q 'muse-unaligned-vector-move'
+          as --version | head -1
+
+      - name: Check out mpv
+        run: |
+          set -euo pipefail
+          git clone --filter=tree:0 https://github.com/mpv-player/mpv.git mpv
+          git -C mpv checkout --detach "$MPV_REVISION"
+          git -C mpv --no-pager log -1 --format='building mpv %h %s'
+
+      - name: Apply the omniphony patch
+        run: |
+          set -euo pipefail
+          git -C mpv apply --3way --verbose "$GITHUB_WORKSPACE/.github/patches/mpv-omniphony.patch"
+
+      # Confirm the client API really is 2.5, the version the app demands.
+      - name: Check client API version
+        run: |
+          set -euo pipefail
+          grep -E "define MPV_CLIENT_API_MAJOR|define MPV_CLIENT_API_MINOR" mpv/include/mpv/client.h
+
+      - name: Build libmpv
+        working-directory: mpv
+        env:
+          CFLAGS: "-O2 ${{ env.BUILD_ARCH }} -Wa,-muse-unaligned-vector-move"
+          CXXFLAGS: "-O2 ${{ env.BUILD_ARCH }} -Wa,-muse-unaligned-vector-move"
+        run: |
+          set -euo pipefail
+          meson setup build \
+            --buildtype=release \
+            --prefix=/usr \
+            -Dlibmpv=true \
+            -Dorender=enabled \
+            -Dcplayer=false \
+            -Dtests=false
+          meson compile -C build
+
+      - name: Audit the runtime for misaligned vector spills
+        run: bash .github/scripts/audit-vector-alignment.sh mpv/build/libmpv.so.2
+
+      - name: Package the runtime
+        run: |
+          set -euo pipefail
+          version=$(git -C mpv describe --tags --always)
+          stage=libmpv-linux-x86_64
+          mkdir -p "$stage/lib" "$stage/include/mpv"
+          cp -a mpv/build/libmpv.so* "$stage/lib/"
+          cp mpv/include/mpv/*.h "$stage/include/mpv/"
+          cp mpv/LICENSE.GPL mpv/LICENSE.LGPL "$stage/"
+          printf 'mpv %s\narch=%s\nbuilt with -Wa,-muse-unaligned-vector-move + omniphony patch (-Dorender=enabled)\n' \
+            "$version" "${{ env.BUILD_ARCH }}" > "$stage/SOURCE.txt"
+          tar -caf "$stage-$version.tar.zst" "$stage"
+          ls -lh "$stage-$version.tar.zst"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: libmpv-linux-x86_64
+          path: libmpv-linux-x86_64-*.tar.zst
+          if-no-files-found: error
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="mpv-linux-$(date -u +%Y%m%d-%H%M%S)-${GITHUB_SHA::7}"
+          {
+            echo 'libmpv built for an AMD A4-5300B (x86-64-v2 + AVX/FMA/F16C/BMI1/LZCNT).'
+            echo
+            echo 'Unpack and point `LD_LIBRARY_PATH` at `libmpv-linux-x86_64/lib`.'
+            echo 'Source: mpv `'"$MPV_REVISION"'` with the repository omniphony patch.'
+          } > notes.md
+          gh release create "$tag" libmpv-linux-x86_64-*.tar.zst \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "libmpv for A4-5300B ($MPV_REVISION)" \
+            --notes-file notes.md
+          echo "release=$tag" >> "$GITHUB_STEP_SUMMARY"
