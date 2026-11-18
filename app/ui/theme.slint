@@ -40,7 +40,9 @@ export global Theme {
     );
     in-out property <color> sidebar-background: Theme.modal-color.with-alpha(0.6);
     in-out property <color> modal-background: Theme.modal-color;
-    in-out property <color> drawer-background: Theme.background-dark-40;
+    // The details drawer sits over full-bleed artwork. A 40% scrim let the
+    // collage bleed through the stream rows and destroyed text contrast.
+    in-out property <color> drawer-background: Theme.modal-color.with-alpha(0.94);
     in-out property <color> control-background: Theme.overlay-color;
     in-out property <color> overlay: Theme.overlay-color;
     in-out property <color> overlay-hover: #ffffff14;
