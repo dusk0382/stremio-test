@@ -696,8 +696,11 @@ pub fn stream_description_parts(
         .collect::<Vec<_>>()
         .join(" ")
         // Addons emit "≡ tracker" glued to the size, which made the stats
-        // line unreadable at drawer width. A dot reads as a separator.
-        .replace('≡', "·");
+        // line unreadable at drawer width. Drop it and keep single spaces.
+        .replace('≡', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
 
     // Language/dub hints live on their own line, after the stats line. Addons
     // use bare flag pairs and "Multi Subs" without saying which side is audio
@@ -718,7 +721,7 @@ pub fn stream_description_parts(
     let languages = if language_names.is_empty() {
         "Languages: not reported".to_owned()
     } else {
-        format!("Languages: {}", language_names.join(" \u{00b7} "))
+        format!("Languages: {}", language_names.join(" "))
     };
 
     let meta_upper = meta_line.to_ascii_uppercase();
@@ -860,8 +863,8 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(parts.languages, "Languages: Multiple subtitles · English");
-        assert!(parts.meta.contains(" · TorrentGalaxy"));
+        assert_eq!(parts.languages, "Languages: Multiple subtitles English");
+        assert!(parts.meta.contains("1.21 GB TorrentGalaxy"));
     }
 
     #[test]
@@ -872,7 +875,7 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(parts.languages, "Languages: French · Spanish (Latino)");
+        assert_eq!(parts.languages, "Languages: French Spanish (Latino)");
     }
 
     #[test]
