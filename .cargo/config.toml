@@ -92,6 +92,10 @@ rustflags = [
     # wrapper that sets LD_LIBRARY_PATH. Without it playback init fails and
     # every Rust-backed player callback (fullscreen, back, episode change)
     # is never registered, so those buttons silently do nothing.
+    # DT_RPATH (not the newer DT_RUNPATH) is inherited by transitive deps,
+    # so libmpv's own libplacebo.so.360 is found as well.
+    "-C",
+    "link-arg=-Wl,--disable-new-dtags",
     "-C",
     "link-arg=-Wl,-rpath,$ORIGIN/libmpv-linux-x86_64/lib",
 ]
