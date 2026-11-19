@@ -516,6 +516,28 @@ pub struct StreamDescriptionParts {
     pub languages: String,
 }
 
+/// Regional-indicator pairs (country flags) in a line, in order, deduplicated.
+fn flag_pairs(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut flags = Vec::new();
+    let mut index = 0;
+    while index + 1 < chars.len() {
+        let pair: String = chars[index..index + 2].iter().collect();
+        if pair
+            .chars()
+            .all(|c| ('\u{1f1e6}'..='\u{1f1ff}').contains(&c))
+        {
+            if !flags.contains(&pair) {
+                flags.push(pair);
+            }
+            index += 2;
+        } else {
+            index += 1;
+        }
+    }
+    flags
+}
+
 /// True for the line addons use to list subtitles/dubs (flags, "Multi Subs",
 /// "Dublado", ...). Release-name lines are excluded so a second file name is
 /// not mistaken for a language list.
@@ -610,14 +632,13 @@ pub fn stream_description_parts(
         .collect::<Vec<_>>()
         .join(" ");
 
-    // Language/dub hints live on their own line, after the stats line. Keep the
-    // addon's own flags and words verbatim: that is what the user expects to
-    // see, and it renders correctly with the colour emoji font in the row.
+    // Only the flags from the addon's language line: no "Multi Subs", no "/".
+    // The colour emoji font in the row draws the regional indicators as flags.
     let languages = raw_lines
         .iter()
         .skip(1)
         .filter(|line| !is_meta_line(line) && is_language_line(line))
-        .map(|line| (*line).to_string())
+        .flat_map(|line| flag_pairs(line))
         .collect::<Vec<_>>()
         .join(" ");
 
@@ -760,7 +781,7 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(parts.languages, "Multi Subs / 🇬🇧");
+        assert_eq!(parts.languages, "🇬🇧");
         assert!(parts.meta.contains("1.21 GB TorrentGalaxy"));
     }
 
@@ -772,7 +793,7 @@ mod tests {
             None,
             None,
         );
-        assert_eq!(parts.languages, "🇫🇷 / 🇲🇽");
+        assert_eq!(parts.languages, "🇫🇷 🇲🇽");
     }
 
     #[test]
