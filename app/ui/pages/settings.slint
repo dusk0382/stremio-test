@@ -207,6 +207,8 @@ export component SettingsPage inherits Rectangle {
     in property <bool> export-loading: false;
     in property <int> export-state: 0;
     in property <string> export-detail: "";
+    in property <bool> cache-clearing: false;
+    in property <string> cache-status: "";
     in property <string> application-version: "";
     in property <string> build-version: "";
     in property <string> server-version: "";
@@ -266,6 +268,7 @@ export component SettingsPage inherits Rectangle {
     private property <bool> external-player-open: false;
     private property <bool> torrent-cache-size-open: false;
     private property <bool> torrent-profile-open: false;
+    private property <bool> cache-dialog-open: false;
 
     callback open-external-url(string);
     callback open-theme-studio;
@@ -276,6 +279,7 @@ export component SettingsPage inherits Rectangle {
     callback change-hardware-acceleration(bool);
     callback change-thumbnail-previews(bool);
     callback clear-search-history;
+    callback clear-cache;
     callback shutdown-server;
     callback change-seeding-enabled(bool);
     callback change-dht-enabled(bool);
@@ -613,6 +617,22 @@ export component SettingsPage inherits Rectangle {
                             label: @tr("CLEAR_HISTORY" => "Clear history");
                             outlined: true;
                             clicked => { root.clear-search-history(); }
+                        }
+                    }
+                    SettingsOption {
+                        unit: root.unit;
+                        label: @tr("SETTINGS_CLEAR_CACHE" => "Clear cached data");
+                        description: root.cache-status != "" ? root.cache-status
+                            : @tr("SETTINGS_CLEAR_CACHE_DESC" => "Removes cached addon responses and poster images.");
+                        PillButton {
+                            width: 16 * root.unit;
+                            unit: root.unit;
+                            label: root.cache-clearing
+                                ? @tr("SETTINGS_CLEAR_CACHE_WORKING" => "Clearing…")
+                                : @tr("SETTINGS_CLEAR_CACHE_BUTTON" => "Clear cache");
+                            outlined: true;
+                            enabled: !root.cache-clearing;
+                            clicked => { root.cache-dialog-open = true; }
                         }
                     }
 
@@ -1776,6 +1796,39 @@ export component SettingsPage inherits Rectangle {
             allow-gradient: false;
             value: root.color-dialog-value;
             input(value) => { root.color-dialog-value = value; }
+        }
+    }
+
+    ModalDialog {
+        width: 100%;
+        height: 100%;
+        z: 2001;
+        unit: root.unit;
+        open: root.cache-dialog-open;
+        background: transparent;
+        title: @tr("SETTINGS_CLEAR_CACHE_CONFIRM_TITLE" => "Clear cached data?");
+        dialog-width: 36 * root.unit;
+        dialog-height: 22 * root.unit;
+        actions: [
+            { id: "cancel", label: @tr("BUTTON_CANCEL" => "Cancel"), icon: @image-url("../assets/images/icons/close.svg"), has-icon: false, enabled: !root.cache-clearing, primary: false },
+            { id: "clear", label: @tr("BUTTON_CLEAR" => "Clear"), icon: @image-url("../assets/images/icons/delete.svg"), has-icon: false, enabled: !root.cache-clearing, primary: true },
+        ];
+        close-requested => { root.cache-dialog-open = false; }
+        action-triggered(action) => {
+            if (action == "clear") {
+                root.clear-cache();
+            }
+            root.cache-dialog-open = false;
+        }
+
+        VerticalLayout {
+            padding: root.unit;
+            Text {
+                text: @tr("SETTINGS_CLEAR_CACHE_CONFIRM_BODY" => "Cached addon responses and poster images will be deleted and downloaded again. Your settings, addons, credentials, library and downloads will not be affected.");
+                color: Theme.text-primary;
+                font-size: root.unit;
+                wrap: word-wrap;
+            }
         }
     }
 }

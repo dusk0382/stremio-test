@@ -510,6 +510,57 @@ pub fn cache_path(url: &str) -> PathBuf {
     cache_root().join(&hash[..2]).join(format!("{hash}.jpg"))
 }
 
+/// Explicit user-initiated purge of decoded and on-disk images. In-flight
+/// downloads may still write a file after this returns; they are best-effort
+/// and the next maintenance pass will pick them up.
+pub async fn clear_all() -> Result<(), String> {
+    let urls: Vec<String> = image_cache()
+        .iter()
+        .chain(required_image_cache().iter())
+        .map(|(key, _)| (*key).clone())
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
+
+    if let Some(cache) = IMAGE_CACHE.get() {
+        cache.invalidate_all();
+    }
+    if let Some(cache) = REQUIRED_IMAGE_CACHE.get() {
+        cache.invalidate_all();
+    }
+    if let Some(cache) = DOWNLOAD_STATE.get() {
+        cache.invalidate_all();
+    }
+    if let Some(pending) = REFRESH_URLS.get() {
+        pending
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+    }
+    // ensure_cache_dir() memoizes directories; drop that memo too or the new
+    // empty cache directory would never be created again.
+    if let Some(dirs) = READY_CACHE_DIRS.get() {
+        dirs.lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .clear();
+    }
+
+    let root = cache_root();
+    tokio::task::spawn_blocking(move || {
+        if root.exists() {
+            std::fs::remove_dir_all(&root).map_err(|error| error.to_string())?;
+        }
+        std::fs::create_dir_all(&root).map_err(|error| error.to_string())
+    })
+    .await
+    .map_err(|error| error.to_string())??;
+
+    for url in urls {
+        request_image(&url);
+    }
+    Ok(())
+}
+
 fn cover_art_path(url: &str) -> PathBuf {
     let hash = blake3::hash(url.as_bytes()).to_hex();
     // Share the sharded poster directory so disk maintenance prunes these too.

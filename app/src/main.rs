@@ -40,6 +40,7 @@ use core_env::DesktopEnv;
 pub mod backup;
 mod color_picker;
 pub mod community_addons;
+mod cache;
 mod config;
 pub mod crash_handler;
 pub mod customization;
@@ -121,6 +122,23 @@ async fn run_application() -> anyhow::Result<()> {
     // A forwarded process exits before touching the primary process's log.
     let app_paths = paths::initialize()?;
     let _guards = logger::init_logger(&profile, app_paths)?;
+
+    // Playback needs libmpv 0.41 (client API 2.5). When the executable is
+    // started directly, the loader may resolve `libmpv.so.2` to the system
+    // 0.37 (API 2.2): playback initialization then fails, which also skips
+    // installing every player callback (fullscreen, back, episode change),
+    // leaving those buttons dead. Prefer the runtime shipped next to us.
+    if std::env::var_os("STREMIO_MPV_RUNTIME").is_none()
+        && let Ok(executable) = std::env::current_exe()
+        && let Some(directory) = executable.parent()
+    {
+        let bundled = directory.join("libmpv-linux-x86_64/lib/libmpv.so.2");
+        if bundled.is_file() {
+            // SAFETY: startup, before any worker thread reads the environment.
+            unsafe { std::env::set_var("STREMIO_MPV_RUNTIME", &bundled) };
+            tracing::info!(path = %bundled.display(), "selected bundled MPV runtime");
+        }
+    }
     tracing::info!(data_root = %app_paths.root().display(), "Starting Stremio-Rust GUI client...");
 
     let res = run_app(&profile, primary_instance, startup_started).await;

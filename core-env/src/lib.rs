@@ -527,6 +527,11 @@ pub async fn maintain_http_cache() -> Result<(), EnvError> {
     http_cache::maintain().await.map_err(EnvError::Other)
 }
 
+/// Removes all cached HTTP responses from the shared application database.
+pub async fn clear_http_cache() -> Result<(), EnvError> {
+    http_cache::clear_all().await.map_err(EnvError::Other)
+}
+
 impl Env for DesktopEnv {
     fn fetch<IN, OUT>(request: Request<IN>) -> TryEnvFuture<OUT>
     where

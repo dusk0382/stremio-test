@@ -85,6 +85,15 @@ rustflags = [
     "target-cpu=x86-64-v2",
     "-C",
     "target-feature=+avx,+fma,+f16c,+bmi1,+lzcnt",
+    # This machine's system libmpv is 0.37 (client API 2.2); the playback
+    # engine needs the bundled 0.41 (API 2.5) in libmpv-linux-x86_64/lib next
+    # to the executable. Embed that as an rpath so the correct runtime is
+    # found even when the app is launched directly instead of through the
+    # wrapper that sets LD_LIBRARY_PATH. Without it playback init fails and
+    # every Rust-backed player callback (fullscreen, back, episode change)
+    # is never registered, so those buttons silently do nothing.
+    "-C",
+    "link-arg=-Wl,-rpath,$ORIGIN/libmpv-linux-x86_64/lib",
 ]
 
 # Keep debug builds responsive without optimizing the entire dependency graph.

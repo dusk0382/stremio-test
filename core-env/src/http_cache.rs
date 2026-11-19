@@ -532,6 +532,16 @@ async fn mark_validated(
     Ok(())
 }
 
+/// Removes every cached HTTP response. Unlike `maintain()` (age/LRU pruning),
+/// this is an explicit user-initiated purge from Settings.
+pub(crate) async fn clear_all() -> Result<(), String> {
+    let mut conn = get_db_conn().await.map_err(|error| error.to_string())?;
+    conn.execute("DELETE FROM http_cache", ())
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 pub(crate) async fn maintain() -> Result<(), String> {
     let mut conn = get_db_conn().await.map_err(|error| error.to_string())?;
     let cutoff = chrono::Utc::now().timestamp() - MAX_AGE_SECONDS;

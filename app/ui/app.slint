@@ -811,6 +811,8 @@ export component MainWindow inherits Window {
     in-out property <bool> settings-export-loading: false;
     in-out property <int> settings-export-state: 0;
     in-out property <string> settings-export-detail: "";
+    in-out property <bool> settings-cache-clearing: false;
+    in-out property <string> settings-cache-status: "";
     in-out property <string> settings-application-version: "";
     in-out property <string> settings-build-version: "";
     in-out property <string> settings-server-version: "";
@@ -1016,6 +1018,7 @@ export component MainWindow inherits Window {
     callback settings-change-hardware-acceleration(bool);
     callback settings-change-thumbnail-previews(bool);
     callback settings-clear-search-history();
+    callback settings-clear-cache();
     callback shutdown-server();
     callback tab-changed(int);
     tab-changed(tab) => {
@@ -1993,6 +1996,8 @@ export component MainWindow inherits Window {
                             ? 2
                             : settings-export-state;
                         export-detail: settings-export-detail;
+                        cache-clearing: settings-cache-clearing;
+                        cache-status: settings-cache-status;
                         application-version: settings-application-version;
                         build-version: settings-build-version;
                         server-version: settings-server-version;
@@ -2053,6 +2058,7 @@ export component MainWindow inherits Window {
                         change-hardware-acceleration(val) => { settings-change-hardware-acceleration(val); }
                         change-thumbnail-previews(val) => { settings-change-thumbnail-previews(val); }
                         clear-search-history => { settings-clear-search-history(); }
+                        clear-cache => { settings-clear-cache(); }
                         shutdown-server => { shutdown-server(); }
 
                         change-seeding-enabled(val) => { settings-change-seeding-enabled(val); }

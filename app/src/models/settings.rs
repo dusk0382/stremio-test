@@ -1097,6 +1097,31 @@ pub fn setup(
         }
     });
 
+    // Clear cached addon responses and poster images (never user data)
+    ui.on_settings_clear_cache({
+        let ui_weak = ui.as_weak();
+        move || {
+            let ui_weak = ui_weak.clone();
+            tokio::spawn(async move {
+                if let Some(ui) = ui_weak.upgrade() {
+                    ui.set_settings_cache_clearing(true);
+                    ui.set_settings_cache_status("Clearing cached data…".into());
+                }
+                let result = crate::cache::clear_application_cache().await;
+                let message = match &result {
+                    Ok(()) => "Cache cleared.".to_owned(),
+                    Err(error) => format!("Cache clear failed: {error}"),
+                };
+                let _ = slint::invoke_from_event_loop(move || {
+                    if let Some(ui) = ui_weak.upgrade() {
+                        ui.set_settings_cache_clearing(false);
+                        ui.set_settings_cache_status(message.into());
+                    }
+                });
+            });
+        }
+    });
+
     // Shutdown streaming server callback
     ui.on_shutdown_server(move || {
         tracing::info!("Closing the app and streaming server...");
