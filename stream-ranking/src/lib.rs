@@ -516,98 +516,6 @@ pub struct StreamDescriptionParts {
     pub languages: String,
 }
 
-/// Country flags are the closest thing addons give us to a language code, but a
-/// flag is a country, not a language. Translate the ones torrent indexes
-/// actually emit into the language people mean, so the UI never shows a bare
-/// pair of flags as if it were self-explanatory.
-fn language_from_flag(flag: &str) -> Option<&'static str> {
-    match flag {
-        "\u{1f1ec}\u{1f1e7}" | "\u{1f1fa}\u{1f1f8}" => Some("English"), // GB, US
-        "\u{1f1eb}\u{1f1f7}" => Some("French"),                          // FR
-        "\u{1f1ea}\u{1f1f8}" => Some("Spanish"),                         // ES
-        "\u{1f1f2}\u{1f1fd}" | "\u{1f1e6}\u{1f1f7}" => Some("Spanish (Latino)"), // MX, AR
-        "\u{1f1ef}\u{1f1f5}" => Some("Japanese"),                        // JP
-        "\u{1f1f0}\u{1f1f7}" => Some("Korean"),                          // KR
-        "\u{1f1e9}\u{1f1ea}" => Some("German"),                          // DE
-        "\u{1f1ee}\u{1f1f9}" => Some("Italian"),                         // IT
-        "\u{1f1f5}\u{1f1f9}" | "\u{1f1e7}\u{1f1f7}" => Some("Portuguese (BR)"), // PT, BR
-        "\u{1f1e8}\u{1f1f3}" | "\u{1f1f9}\u{1f1f4}" => Some("Chinese"),  // CN, TW
-        "\u{1f1f7}\u{1f1fa}" => Some("Russian"),                         // RU
-        "\u{1f1f3}\u{1f1f1}" => Some("Dutch"),                           // NL
-        _ => None,
-    }
-}
-
-fn flag_pairs(text: &str) -> Vec<String> {
-    let chars: Vec<char> = text.chars().collect();
-    let mut flags = Vec::new();
-    let mut index = 0;
-    while index + 1 < chars.len() {
-        let pair: String = chars[index..index + 2].iter().collect();
-        if pair.chars().all(|c| ('\u{1f1e6}'..='\u{1f1ff}').contains(&c)) {
-            if !flags.contains(&pair) {
-                flags.push(pair);
-            }
-            index += 2;
-        } else {
-            index += 1;
-        }
-    }
-    flags
-}
-
-/// Turns an addon's language line into readable language names. Addons use a
-/// bare `flag / flag` (or `Multi Subs / flag`) with no indication of which side
-/// is audio and which is subtitles, so the honest thing is to label the field
-/// and list the languages, not invent an audio/subs split the data cannot
-/// support. Unknown flags are kept verbatim rather than silently dropped.
-fn language_names_from_line(line: &str) -> Vec<String> {
-    let lower = line.to_lowercase();
-    let mut names: Vec<String> = Vec::new();
-
-    if lower.contains("multi subs") || lower.contains("multi subtitles") {
-        names.push("Multiple subtitles".to_owned());
-    }
-
-    for flag in flag_pairs(line) {
-        let name = language_from_flag(&flag)
-            .map(ToOwned::to_owned)
-            .unwrap_or(flag);
-        if !names.contains(&name) {
-            names.push(name);
-        }
-    }
-
-    // Text hints that addons use instead of flags. Order matters: the more
-    // specific variants must come before the generic language name.
-    for (hint, name) in [
-        ("latino", "Spanish (Latino)"),
-        ("castellano", "Spanish"),
-        ("español", "Spanish"),
-        ("espanol", "Spanish"),
-        ("vostfr", "French"),
-        ("legendado", "Portuguese"),
-        ("dublado", "Portuguese"),
-        ("english", "English"),
-        ("japanese", "Japanese"),
-        ("french", "French"),
-        ("spanish", "Spanish"),
-        ("german", "German"),
-        ("italian", "Italian"),
-        ("korean", "Korean"),
-        ("portuguese", "Portuguese"),
-        ("chinese", "Chinese"),
-        ("arabic", "Arabic"),
-        ("hindi", "Hindi"),
-    ] {
-        if lower.contains(hint) && !names.iter().any(|n| n == name) {
-            names.push(name.to_owned());
-        }
-    }
-
-    names
-}
-
 /// True for the line addons use to list subtitles/dubs (flags, "Multi Subs",
 /// "Dublado", ...). Release-name lines are excluded so a second file name is
 /// not mistaken for a language list.
@@ -683,7 +591,7 @@ pub fn stream_description_parts(
         return StreamDescriptionParts {
             title: String::new(),
             meta: stats.join(" "),
-            languages: "Languages: not reported".to_owned(),
+            languages: String::new(),
         };
     }
 
@@ -702,27 +610,16 @@ pub fn stream_description_parts(
         .collect::<Vec<_>>()
         .join(" ");
 
-    // Language/dub hints live on their own line, after the stats line. Addons
-    // use bare flag pairs and "Multi Subs" without saying which side is audio
-    // and which is subtitles, so show named languages under one honest label
-    // instead of an ambiguous "flag / flag".
-    let mut language_names: Vec<String> = Vec::new();
-    for line in raw_lines
+    // Language/dub hints live on their own line, after the stats line. Keep the
+    // addon's own flags and words verbatim: that is what the user expects to
+    // see, and it renders correctly with the colour emoji font in the row.
+    let languages = raw_lines
         .iter()
         .skip(1)
         .filter(|line| !is_meta_line(line) && is_language_line(line))
-    {
-        for name in language_names_from_line(line) {
-            if !language_names.contains(&name) {
-                language_names.push(name);
-            }
-        }
-    }
-    let languages = if language_names.is_empty() {
-        "Languages: not reported".to_owned()
-    } else {
-        format!("Languages: {}", language_names.join(" "))
-    };
+        .map(|line| (*line).to_string())
+        .collect::<Vec<_>>()
+        .join(" ");
 
     let meta_upper = meta_line.to_ascii_uppercase();
     if let Some(s) = seeders
@@ -856,37 +753,37 @@ mod tests {
     }
 
     #[test]
-    fn language_lines_are_named_instead_of_bare_flags() {
+    fn language_lines_keep_the_addon_flags() {
         let parts = stream_description_parts(
             "Torrentio 1080p",
             "[ToonsHub] One Piece S24E24 1080p\n👤 58 💾 1.21 GB ≡ TorrentGalaxy\nMulti Subs / 🇬🇧",
             None,
             None,
         );
-        assert_eq!(parts.languages, "Languages: Multiple subtitles English");
+        assert_eq!(parts.languages, "Multi Subs / 🇬🇧");
         assert!(parts.meta.contains("1.21 GB TorrentGalaxy"));
     }
 
     #[test]
-    fn two_flags_are_shown_as_named_languages() {
+    fn two_flags_are_kept_verbatim() {
         let parts = stream_description_parts(
             "Torrentio 1080p",
             "[Erai-raws] One Piece - 1179\n👤 131 💾 772.84 MB ≡ TorrentGalaxy\n🇫🇷 / 🇲🇽",
             None,
             None,
         );
-        assert_eq!(parts.languages, "Languages: French Spanish (Latino)");
+        assert_eq!(parts.languages, "🇫🇷 / 🇲🇽");
     }
 
     #[test]
-    fn missing_language_line_is_explicit() {
+    fn missing_language_line_stays_empty() {
         let parts = stream_description_parts(
             "Torrentio 1080p",
             "[Erai-raws] One Piece - 1179\n👤 131 💾 772.84 MB ≡ TorrentGalaxy",
             None,
             None,
         );
-        assert_eq!(parts.languages, "Languages: not reported");
+        assert_eq!(parts.languages, "");
     }
 
     #[test]
